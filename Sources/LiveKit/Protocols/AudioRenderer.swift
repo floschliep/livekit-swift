@@ -26,14 +26,22 @@ public protocol AudioRenderer {
 }
 
 class AudioRendererAdapter: NSObject, LKRTCAudioRenderer {
-    private weak var target: AudioRenderer?
+    private(set) weak var target: AudioRenderer?
+    
+    private var hasSentTargetDeallocated = false
+    var onTargetDeallocated: ((AudioRendererAdapter) -> Void)?
 
     init(target: AudioRenderer) {
         self.target = target
     }
 
     func render(sampleBuffer: CMSampleBuffer) {
-        target?.render(sampleBuffer: sampleBuffer)
+        if let target {
+            target.render(sampleBuffer: sampleBuffer)
+        } else if !hasSentTargetDeallocated {
+            hasSentTargetDeallocated = true
+            onTargetDeallocated?(self)
+        }
     }
 
     // Proxy the equality operators

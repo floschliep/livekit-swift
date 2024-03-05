@@ -31,6 +31,8 @@ public class RemoteAudioTrack: Track, RemoteTrack, AudioTrack {
             audioTrack.source.volume = newValue * 10
         }
     }
+    
+    private var renderAdapters = Set<AudioRendererAdapter>()
 
     init(name: String,
          source: Track.Source,
@@ -46,12 +48,20 @@ public class RemoteAudioTrack: Track, RemoteTrack, AudioTrack {
 
     public func add(audioRenderer: AudioRenderer) {
         guard let audioTrack = mediaTrack as? LKRTCAudioTrack else { return }
-        audioTrack.add(AudioRendererAdapter(target: audioRenderer))
+        
+        let wrapper = AudioRendererAdapter(target: audioRenderer)
+        wrapper.onTargetDeallocated = { [weak self] adapter in
+            self?.removeAdapter(adapter)
+        }
+        renderAdapters.insert(wrapper)
+        audioTrack.add(wrapper)
     }
 
     public func remove(audioRenderer: AudioRenderer) {
-        guard let audioTrack = mediaTrack as? LKRTCAudioTrack else { return }
-        audioTrack.remove(AudioRendererAdapter(target: audioRenderer))
+        guard let adapter = renderAdapters.first(where: { $0.target === audioRenderer }) else {
+            return
+        }
+        removeAdapter(adapter)
     }
 
     // MARK: - Internal
@@ -62,5 +72,11 @@ public class RemoteAudioTrack: Track, RemoteTrack, AudioTrack {
 
     override func stopCapture() async throws {
         AudioManager.shared.trackDidStop(.remote)
+    }
+    
+    private func removeAdapter(_ adapter: AudioRendererAdapter) {
+        renderAdapters.remove(adapter)
+        guard let audioTrack = mediaTrack as? LKRTCAudioTrack else { return }
+        audioTrack.remove(adapter)
     }
 }
